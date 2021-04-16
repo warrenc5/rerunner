@@ -1,6 +1,8 @@
 #!/bin/bash 
 #cd `dirname $0`
 
+echo "my pid is $$"
+
 while IFS=';' read -ra here; do
         WATCH+="${here[@]} "
 done 
@@ -8,28 +10,52 @@ echo "${#WATCH[@]}"        # print array length
 echo "${WATCH[@]}"         # print array elements
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
 
+PROG=inotifywait
+LOCK_DIR=/var/run/lock/
 
-inotifywait > /dev/null 2>&1
+if [ ! -d $LOCK_DIR ] ; then
+LOCK_DIR=$TMP
+fi 
+
+PIDF=${LOCK_DIR}/runner.pid
+
+
+$PROG > /dev/null 2>&1
+
+if [ $? -ne 0 ] ; then
+PROG=fswatch
+ARGS="-1 -l 1 "
+fi 
+
+if [ $? == 127 ] ; then
+echo "sudo apt install inotify-tools"
+echo "sudo brew install fswatch"
+exit 1
+fi 
+
+echo $PROG
+
 if [ -z "$1" ] ; then 
 echo "usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`"
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
 fi 
 
-if [ $? == 127 ] ; then
-echo "sudo apt install inotify-tools"
-exit 1
-fi 
-
-PIDF=/var/run/lock/runner.pid
 touch $PIDF
 
 
-trap "pkill -HUP inotifywait" SIGHUP
-trap "pkill -ABRT inotifywait" SIGABRT
+trap "pkill -HUP ${PROG}" SIGHUP
+trap "pkill -ABRT ${PROG}" SIGABRT
 
 let err=0
 while [[ 1 ]]; do 
 pwd 
+
+echo "$@ is waiting"
+${PROG} ${ARGS} $WATCH &
+
+PID=$!
+echo $PID
+echo -n $PID > ${LOCK_DIR}/runner.pid
 
 echo "checking up to date"
 for file in $WATCH ;  do
@@ -41,17 +67,15 @@ for file in $WATCH ;  do
   fi
 done  
 
-echo "$@ is waiting"
-inotifywait -e modify $WATCH &
 
-PID=$!
-echo $PID
-echo -n "$PID" > /var/run/lock/runner.pid
 wait $PID
+
+
 RET=$?
-echo $RET
+echo "prog exited $RET"
 
 if [ $RET -eq 129 ] ; then
+  echo "normal continue"
   continue;
 elif [ $RET -eq 134 ] ; then
   echo "abort"
@@ -70,7 +94,7 @@ touch $PIDF
 $@ &
 PID=$!
 echo "RUNNING $@ $PID"
-echo -n $PID > /var/run/lock/runner.pid
+echo -n $PID > $LOCK_DIR/runner.pid
 wait $PID 
 RET=$?
 echo "completed"
