@@ -2,6 +2,8 @@
 #cd `dirname $0`
 
 echo "my pid is $$"
+
+
 if [ -z "$1" ] ; then 
 echo 'usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`'
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
@@ -23,8 +25,9 @@ if [ ! -d $LOCK_DIR ] ; then
 fi 
 
 PIDF=${LOCK_DIR}/runner.pid
+echo $$ > ${PIDF}
 
-$PROG > /dev/null 2>&1
+which $PROG > /dev/null 2>&1
 
 if [ $? -ne 0 ] ; then
   PROG=fswatch
@@ -46,10 +49,9 @@ fi
 
 touch $PIDF
 
-
-trap "pkill -HUP ${PROG}" SIGHUP
-trap "pkill -ABRT ${PROG}" SIGABRT
-trap "kill $PIDF" INT
+trap "echo 'hup' && pkill -HUP ${PROG}" SIGHUP
+trap "echo 'abort' && pkill -ABRT ${PROG}" SIGABRT
+trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
 
 let err=0
 
@@ -61,10 +63,11 @@ while [[ 1 ]]; do
 
   PID=$!
   echo $PID
-  echo -n $PID > ${LOCK_DIR}/runner.pid
+  echo -n $PID > ${LOCK_DIR}/runner-cmd.pid
 
   echo "checking up to date"
 
+  set +x
   for file in $WATCH ;  do
     if [ $file -nt $PIDF ] ; then
       echo "building newer"
@@ -73,13 +76,18 @@ while [[ 1 ]]; do
       break
     fi
   done  
+  set -x
 
+  trap "echo 'int' && kill -9 ${PID}" INT
   wait $PID
 
   RET=$?
   echo "prog exited $RET"
+  
+  trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
+  sleep 1
 
-  if [ $RET -eq 129 ] ; then
+  if [ $RET -eq 129 ] || [ $RET -eq 130 ] ; then
     echo "normal continue"
     continue;
   elif [ $RET -eq 134 ] ; then
@@ -88,6 +96,8 @@ while [[ 1 ]]; do
     echo "watch failed"
     exit 1
   fi
+
+  trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
 
   sleep 1
 
@@ -99,7 +109,8 @@ while [[ 1 ]]; do
   $@ &
   PID=$!
   echo "RUNNING $@ $PID `date -Iseconds`" 
-  echo -n $PID > $LOCK_DIR/runner.pid
+  echo -n $PID > $LOCK_DIR/runner-cmd.pid
+  trap "echo 'int' && kill -9 ${PID}" INT
   wait $PID 
   RET=$?
   echo "completed"
