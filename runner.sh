@@ -1,20 +1,20 @@
-#!/bin/bash -x
+#!/bin/bash 
+#set -x
 #cd `dirname $0`
 
 echo "my pid is $$"
 
-
-if [ -z "$1" ] ; then 
+if [ -z "$1" ] ; then
 echo 'usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`'
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
-fi 
+fi
 
 while IFS=';' read -ra here; do
   WATCH+="${here[@]} "
-done 
+done
 
-echo "${#WATCH[@]}"        # print array length
-echo "${WATCH[@]}"         # print array elements
+echo "watching ${#WATCH[@]} files"        # print array length
+#echo "${WATCH[@]}"         # print array elements
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
 
 PROG=inotifywait
@@ -22,7 +22,7 @@ LOCK_DIR=/var/run/lock/
 
 if [ ! -d $LOCK_DIR ] ; then
   LOCK_DIR=$TMP
-fi 
+fi
 
 PIDF=${LOCK_DIR}/runner.pid
 echo $$ > ${PIDF}
@@ -32,20 +32,20 @@ which $PROG > /dev/null 2>&1
 if [ $? -ne 0 ] ; then
   PROG=fswatch
   ARGS="-1 -l 1 "
-fi 
+fi
 
 if [ $? == 127 ] ; then
   echo "sudo apt install inotify-tools"
   echo "sudo brew install fswatch"
   exit 1
-fi 
+fi
 
 echo $PROG
 
-if [ -z "$1" ] ; then 
+if [ -z "$1" ] ; then
 echo "usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`"
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
-fi 
+fi
 
 touch $PIDF
 
@@ -55,8 +55,8 @@ trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
 
 let err=0
 
-while [[ 1 ]]; do 
-  pwd 
+while [[ 1 ]]; do
+  pwd
 
   echo "$@ is waiting"
   echo $WATCH | xargs ${PROG} ${ARGS} &
@@ -72,7 +72,7 @@ while [[ 1 ]]; do
     if [ $file -nt $PIDF ] ; then
       echo "building newer"
       touch PID
-      $@ 
+      $@
       break
     fi
   done  
@@ -103,12 +103,13 @@ while [[ 1 ]]; do
 
   #if [ -f $PIDF ] ; then
   #fi
-  #TODO 
+  #TODO
   #$@ &
   touch $PIDF
   $@ &
   PID=$!
-  echo "RUNNING $@ $PID `date -Iseconds`" 
+  #echo "RUNNING $@ $PID `date -Iseconds`" 
+  echo "RUNNING $@ $PID `date -u +'%Y-%m-%dT%H:%M:%S'`"
   echo -n $PID > $LOCK_DIR/runner-cmd.pid
   trap "echo 'int' && kill -9 ${PID}" INT
   wait $PID 
