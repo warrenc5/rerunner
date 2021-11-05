@@ -1,23 +1,36 @@
 #!/bin/bash -x
 #cd `dirname $0`
 
-echo "my pid is $$"
+MY_PID=$$
+echo "my pid is $MY_PID"
 
 
 if [ -z "$1" ] ; then 
+echo 'usage runner.sh target.sh // by default it will watch target.sh'
 echo 'usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`'
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
 fi 
 
-while IFS=';' read -ra here; do
-  WATCH+="${here[@]} "
-done 
+unset input
+#while IFS=';' read -ra here; do
+let WATCH=
 
-echo "${#WATCH[@]}"        # print array length
-echo "${WATCH[@]}"         # print array elements
+while IFS=';' read -t 1 -ra input && [ -n "$input" ]; do 
+  #echo watching $input
+  WATCH+="${input[@]} "
+done
+
+if [ 0 -eq ${#WATCH[@]} ] ; then 
+  #echo 'default watching target'
+  WATCH+="$1"
+fi 
+
+echo "watching ${#WATCH[@]} files"        # print array length
+echo "watching ${WATCH[@]}"         # print array elements
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
-
 PROG=inotifywait
+#ARGS="-o /tmp/inotify-${MY_PID} -d -r -"
+ARGS="-e modify -e create"
 LOCK_DIR=/var/run/lock/
 
 if [ ! -d $LOCK_DIR ] ; then
@@ -58,8 +71,14 @@ let err=0
 while [[ 1 ]]; do 
   pwd 
 
-  echo "$@ is waiting"
-  echo $WATCH | xargs ${PROG} ${ARGS} &
+  echo "$@ is waiting for notification to run"
+  echo ${PROG} ${ARGS} 
+
+  echo $WATCH | xargs ${PROG} ${ARGS}
+
+if [ $? -ne 0 ] ; then
+echo $PROG failed && exit 69
+fi
 
   PID=$!
   echo $PID
@@ -87,7 +106,9 @@ while [[ 1 ]]; do
   trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
   sleep 1
 
-  if [ $RET -eq 129 ] || [ $RET -eq 130 ] ; then
+  if [ $RET -eq 0 ] ; then
+    echo "normal exit"
+  elif [ $RET -eq 129 ] || [ $RET -eq 130 ] ; then
     echo "normal continue"
     continue;
   elif [ $RET -eq 134 ] ; then
