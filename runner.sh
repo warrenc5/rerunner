@@ -1,14 +1,16 @@
 #!/bin/bash 
 #set -x
 #cd `dirname $0`
-
+EXIT=${EXIT:-(123 0)}
+EXIT=(123 0)
 MY_PID=$$
 echo "my pid is $MY_PID"
 
 if [ -z "$1" ] ; then 
 echo 'usage runner.sh target.sh // by default it will watch target.sh'
 echo 'usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`'
-echo "usage runner.sh target.sh <<EOF some list of files EOF"
+echo 'usage runner.sh target.sh <<<$(ls this file and that file)'
+echo "usage runner.sh target.sh <<EOF some list of files separated by IFS or new lines\nEOF"
 exit 1
 fi
 
@@ -29,7 +31,10 @@ fi
 echo "watching ${#WATCH[@]} files"        # print array length
 echo "watching ${WATCH[@]}"         # print array elements
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
-PROG=inotifywait
+
+PROG=inotifywait 
+# todo inotifywait
+
 #ARGS="-o /tmp/inotify-${MY_PID} -d -r -"
 ARGS="-e modify -e create"
 LOCK_DIR=/var/run/lock/
@@ -72,22 +77,9 @@ let err=0
 while [[ 1 ]]; do
   pwd
 
-  echo "$@ is waiting for notification to run"
-  echo ${PROG} ${ARGS} 
-
-  echo $WATCH | xargs ${PROG} ${ARGS}
-
-if [ $? -ne 0 ] ; then
-echo $PROG failed && exit 69
-fi
-
-  PID=$!
-  echo $PID
-  echo -n $PID > ${LOCK_DIR}/runner-cmd.pid
-
   echo "checking up to date"
 
-  set +x
+  #set +x
   for file in $WATCH ;  do
     if [ $file -nt $PIDF ] ; then
       echo "building newer"
@@ -96,13 +88,30 @@ fi
       break
     fi
   done  
-  set -x
+  #set -x
+
+  echo "$@ is waiting for notification to run"
+  echo ${PROG} ${ARGS} 
+
+  echo $WATCH | xargs ${PROG} ${ARGS}
+
+  RET=$?
+  if [[ " ${EXIT[*]} " =~ " $RET " ]] ; then 
+    echo $PROG success exit with $RET 
+  else
+    echo $PROG failed with $RET - valid are ${EXIT[*]}
+    exit 69
+  fi
+
+  PID=$!
+  echo $PID
+  echo -n $PID > ${LOCK_DIR}/runner-cmd.pid
 
   trap "echo 'int' && kill -9 ${PID}" INT
   wait $PID
 
   RET=$?
-  echo "prog exited $RET"
+  echo "${PROG} exited $RET"
   
   trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
   sleep 1
@@ -122,7 +131,6 @@ fi
   trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
 
   sleep 1
-
   #if [ -f $PIDF ] ; then
   #fi
   #TODO
