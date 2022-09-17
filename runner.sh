@@ -44,7 +44,6 @@ if [ ! -d $LOCK_DIR ] ; then
 fi
 
 PIDF=${LOCK_DIR}/runner.pid
-echo $$ > ${PIDF}
 
 which $PROG > /dev/null 2>&1
 
@@ -66,7 +65,6 @@ echo "usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
 fi
 
-touch $PIDF
 
 trap "echo 'hup' && pkill -HUP ${PROG}" SIGHUP
 trap "echo 'abort' && pkill -ABRT ${PROG}" SIGABRT
@@ -79,7 +77,6 @@ while [[ 1 ]]; do
 
   echo "checking up to date"
 
-  #set +x
   for file in $WATCH ;  do
     if [ $file -nt $PIDF ] ; then
       echo "building newer"
@@ -88,6 +85,10 @@ while [[ 1 ]]; do
       break
     fi
   done  
+
+  touch $PIDF
+  echo $$ > ${PIDF}
+
   #set -x
 
   echo "$@ is waiting for notification to run"
