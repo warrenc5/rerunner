@@ -2,11 +2,14 @@
 #set -x
 #cd `dirname $0`
 EXIT=${EXIT:-(123 0)}
-EXIT=(123 0)
+CONT=(123 0 131 130)
+EXIT=(137)
 MY_PID=$$
 echo "my pid is $MY_PID"
+PROG=$@
 
 if [ -z "$1" ] ; then 
+echo 'traps are CTRL+\ to rerun and CTRL+C to int'
 echo 'usage runner.sh target.sh // by default it will watch target.sh'
 echo 'usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`'
 echo 'usage runner.sh target.sh <<<$(ls this file and that file)'
@@ -32,7 +35,7 @@ echo "watching ${#WATCH[@]} files"        # print array length
 echo "watching ${WATCH[@]}"         # print array elements
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
 
-PROG=inotifywait 
+IPROG=inotifywait 
 # todo inotifywait
 
 #ARGS="-o /tmp/inotify-${MY_PID} -d -r -"
@@ -44,11 +47,13 @@ if [ ! -d $LOCK_DIR ] ; then
 fi
 
 PIDF=${LOCK_DIR}/runner.pid
+#echo $MY_PID > ${PIDF}
+echo ${MY_PID} ${PIDF}
 
-which $PROG > /dev/null 2>&1
+which $IPROG > /dev/null 2>&1
 
 if [ $? -ne 0 ] ; then
-  PROG=fswatch
+  IPROG=fswatch
   ARGS="-1 -l 1 "
 fi
 
@@ -58,97 +63,78 @@ if [ $? == 127 ] ; then
   exit 1
 fi
 
-echo $PROG
+echo $IPROG
 
 if [ -z "$1" ] ; then
 echo "usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`"
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
 fi
+DATE=`date -u +'%Y-%m-%dT%H:%M:%S'`
+echo "starting with pid date ${DATE}"
+#FIXME: traps 
+#set -o ignoreeof
+#CTRL+\
 
-
-trap "echo 'hup' && pkill -HUP ${PROG}" SIGHUP
-trap "echo 'abort' && pkill -ABRT ${PROG}" SIGABRT
-trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
+trap "echo 'quit1' && touch -d ${DATE} ${PIDF} && pkill -HUP ${IPROG}" QUIT
+trap "echo 'exit1' && pkill -HUP ${IPROG}" EXIT
+trap "echo 'hup' && pkill -HUP ${IPROG}" SIGHUP
+trap "echo 'abort' && pkill -ABRT ${IPROG}" SIGABRT
 
 let err=0
+
+function run () { 
+  touch $PIDF
+  ${PROG} &
+  PID=$!
+  trap "echo 'int ${PROG}' && kill -9 ${PID}" INT
+  #echo "RUNNING ${PROG} $PID `date -Iseconds`" 
+  echo "RUNNING ${PROG} $PID `date -u +'%Y-%m-%dT%H:%M:%S'`"
+  echo -n $PID > $LOCK_DIR/runner-cmd.pid
+  wait $PID 
+  RET=$?
+
+  echo "completed"
+
+  if [ "$RET" != 0 ] ; then
+    echo "command failed"
+  fi
+
+}
 
 while [[ 1 ]]; do
   pwd
 
   echo "checking up to date"
 
+  trap "echo 'int2' && kill -9 ${MY_PID}" INT
+
   for file in $WATCH ;  do
     if [ $file -nt $PIDF ] ; then
-      echo "building newer"
-      touch PID
-      $@
+      echo "building newer "
+      run
       break
     fi
   done  
 
-  touch $PIDF
-  echo $$ > ${PIDF}
-
   #set -x
 
-  echo "$@ is waiting for notification to run"
-  echo ${PROG} ${ARGS} 
-
-  echo $WATCH | xargs ${PROG} ${ARGS}
-
-  RET=$?
-  if [[ " ${EXIT[*]} " =~ " $RET " ]] ; then 
-    echo $PROG success exit with $RET 
-  else
-    echo $PROG failed with $RET - valid are ${EXIT[*]}
-    exit 69
-  fi
-
+  echo "${PROG} is waiting for notification to run"
+  echo ${IPROG} ${ARGS} 
+  echo $WATCH | xargs ${IPROG} ${ARGS} &
   PID=$!
   echo $PID
-  echo -n $PID > ${LOCK_DIR}/runner-cmd.pid
-
-  trap "echo 'int' && kill -9 ${PID}" INT
   wait $PID
-
   RET=$?
-  echo "${PROG} exited $RET"
-  
-  trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
-  sleep 1
+  echo "${IPROG} exited $RET"
 
-  if [ $RET -eq 0 ] ; then
-    echo "normal exit"
-  elif [ $RET -eq 129 ] || [ $RET -eq 130 ] ; then
-    echo "normal continue"
-    continue;
-  elif [ $RET -eq 134 ] ; then
-    echo "abort"
-  elif [ "$RET" -gt 1 ] ; then
-    echo "watch failed"
-    exit 1
-  fi
-
-  trap "echo 'int' && kill -9 `cat ${LOCK_DIR}/runner.pid`" INT
-
-  sleep 1
-  #if [ -f $PIDF ] ; then
-  #fi
-  #TODO
-  #$@ &
-  touch $PIDF
-  $@ &
-  PID=$!
-  #echo "RUNNING $@ $PID `date -Iseconds`" 
-  echo "RUNNING $@ $PID `date -u +'%Y-%m-%dT%H:%M:%S'`"
-  echo -n $PID > $LOCK_DIR/runner-cmd.pid
-  trap "echo 'int' && kill -9 ${PID}" INT
-  wait $PID 
-  RET=$?
-  echo "completed"
-
-  if [ "$RET" != 0 ] ; then
-    echo "command failed"
-    #exit 1
+  if [[ " ${CONT[*]} " =~ " $RET " ]] ; then 
+    echo $IPROG success exit with $RET 
+    run
+  elif [[ " ${EXIT[*]} " =~ " $RET " ]] ; then 
+    echo $IPROG failed exit with $RET 
+    exit $RET
+  else
+    echo $IPROG failed with $RET - valid are ${EXIT[*]} and ${CONT[*]}
+    exit 69
   fi
 done
