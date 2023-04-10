@@ -88,7 +88,7 @@ function run () {
   PID=$!
   trap "echo 'int ${PROG}' && kill -9 ${PID}" INT
   #echo "RUNNING ${PROG} $PID `date -Iseconds`" 
-  echo "RUNNING ${PROG} $PID `date -u +'%Y-%m-%dT%H:%M:%S'`"
+  echo "RUNNING '${PROG}' pid: $PID time: `date -u +'%Y-%m-%dT%H:%M:%S'`"
   echo -n $PID > $LOCK_DIR/runner-cmd.pid
   wait $PID 
   RET=$?
