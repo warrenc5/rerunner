@@ -126,8 +126,10 @@ while [[ 1 ]]; do
   #set -x
 
   echo "${PROG} is waiting for notification to run"
-  echo ${IPROG} ${ARGS} 
-  echo $WATCH | xargs ${IPROG} ${ARGS} &
+  echo "using ${IPROG} ${ARGS}"
+  set -x
+  echo ${WATCH[@]} | xargs -t ${IPROG} ${ARGS} &
+  set +x
   PID=$!
   echo $PID
   wait $PID
