@@ -2,6 +2,7 @@
 #set -x
 #cd `dirname $0`
 EXIT=${EXIT:-(123 0)}
+#CONT=(123 0 131 130)
 CONT=(123 0 131 130)
 EXIT=(137)
 MY_PID=$$
@@ -21,18 +22,24 @@ unset input
 #while IFS=';' read -ra here; do
 unset WATCH
 
+declare -a my_array
+WATCH=()
 while IFS=';' read -t 1 -ra input && [ -n "$input" ]; do 
   #echo watching $input
-  WATCH+="${input[@]} "
+  WATCH+=(${input[@]})
 done
 
 if [ 0 -eq ${#WATCH[@]} ] ; then 
   #echo 'default watching target'
-  WATCH+="$1"
+  for arg in $@ ; do
+    r=`realpath $arg`
+    if [ -f $r ] ; then
+      WATCH+=($r)
+    fi 
+  done
 fi 
-
-echo "watching ${#WATCH[@]} files"        # print array length
 echo "watching ${WATCH[@]}"         # print array elements
+echo "watching ${#WATCH[@]} files"        # print array length
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
 
 IPROG=inotifywait 
@@ -93,7 +100,7 @@ function run () {
   wait $PID 
   RET=$?
 
-  echo "completed"
+  echo "completed - return code $RET"
 
   if [ "$RET" != 0 ] ; then
     echo "command failed"
