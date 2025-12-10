@@ -6,7 +6,7 @@ EXIT=${EXIT:-(123 0)}
 CONT=(123 0 131 130)
 EXIT=(137)
 MY_PID=$$
-xpatterns=("\.sw*" "\.netbeans_automatic_build")
+xpatterns=("\.sw.*" "\.netbeans_automatic_build")
 echo "my pid is $MY_PID"
 PROG=$@
 
