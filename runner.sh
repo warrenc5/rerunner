@@ -6,6 +6,7 @@ EXIT=${EXIT:-(123 0)}
 CONT=(123 0 131 130)
 EXIT=(137)
 MY_PID=$$
+xpatterns=("\.sw.*" "\.netbeans_automatic_build")
 echo "my pid is $MY_PID"
 PROG=$@
 
@@ -19,27 +20,51 @@ exit 1
 fi
 
 unset input
-#while IFS=';' read -ra here; do
 unset WATCH
 
 declare -a my_array
 WATCH=()
+
+if [ ! -f "$1" ] ; then 
+echo "$1 not found" && exit 1 
+fi
+
+
 while IFS=';' read -t 1 -ra input && [ -n "$input" ]; do 
   #echo watching $input
   WATCH+=(${input[@]})
+
 done
+
 
 if [ 0 -eq ${#WATCH[@]} ] ; then 
   #echo 'default watching target'
   for arg in $@ ; do
     r=`realpath $arg`
-    if [ -f $r ] ; then
-      WATCH+=($r)
-    fi 
+    WATCH+=($r)
   done
 fi 
+
+filtered=()
+for item in "${WATCH[@]}"; do
+  m=0
+  for pat in "${xpatterns[@]}"; do
+    if [[ $item =~ $pat ]]; then
+        echo "remove: $item $pat"
+        m=1
+        break;
+    fi
+  done
+
+  [[ $m -eq 0 ]] && [[ -f $item ]] && filtered+=($item) 
+
+done
+
+WATCH=("${filtered[@]}")
+
 echo "watching ${WATCH[@]}"         # print array elements
 echo "watching ${#WATCH[@]} files"        # print array length
+
 #for file in "${WATCH[@]}"; do echo "$file"; done  # loop over the array
 
 IPROG=inotifywait 
@@ -76,6 +101,7 @@ if [ -z "$1" ] ; then
 echo "usage runner.sh target.sh <<<`find . -name \*.java -o -name \*.js -o -name \*.xml | grep -v "test\|target"`"
 echo "usage runner.sh target.sh <<EOF some list of files EOF"
 fi
+
 DATE=`date -u +'%Y-%m-%dT%H:%M:%S'`
 echo "starting with pid date ${DATE}"
 #FIXME: traps 
@@ -115,7 +141,7 @@ while [[ 1 ]]; do
 
   trap "echo 'int2' && kill -9 ${MY_PID}" INT
 
-  for file in $WATCH ;  do
+  for file in ${WATCH[@]};  do
     if [ $file -nt $PIDF ] ; then
       echo "building newer "
       run
